@@ -81,7 +81,7 @@ const fetch = async (options: FetchOptions) => {
   `;
 
   const res = await queryDuneSql(options, query);
-  if (!res[0]?.fee_rows) throw new Error(`near-intents: the dune fee datasets have no rows for ${options.dateString} yet`);
+  if (!Number(res[0]?.fee_rows)) throw new Error(`near-intents: the dune fee datasets have no rows for ${options.dateString} yet`);
   const fees_usd = res[0]?.fees_usd ?? 0;
   const frontend_near = res[0]?.frontend_near ?? 0;
   const other_near = res[0]?.other_near ?? 0;
