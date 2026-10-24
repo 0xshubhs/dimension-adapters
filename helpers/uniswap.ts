@@ -371,7 +371,7 @@ const defaultAlgebraV3PoolCreatedEvent = 'event Pool (address indexed token0, ad
 // Algebra Constants.COMMUNITY_FEE_DENOMINATOR, same on V1.9 and Integral
 const COMMUNITY_FEE_DENOMINATOR = 1e3
 
-export const getUniV3LogAdapter: any = ({ factory, poolCreatedEvent, swapEvent = defaultV3SwapEvent, customLogic, isAlgebraV3 = false, isAlgebraV2 = false, userFeesRatio, revenueRatio, protocolRevenueRatio, holdersRevenueRatio, blacklistPools, blacklistTokens, pools, getRevenueRatio, dynamicProtocolFees = false, algebraCommunityFee = false }: UniV3Config): FetchV2 => {
+export const getUniV3LogAdapter: any = ({ factory, poolCreatedEvent, swapEvent = defaultV3SwapEvent, customLogic, isAlgebraV3 = false, isAlgebraV2 = false, feeFromSlot0 = false, userFeesRatio, revenueRatio, protocolRevenueRatio, holdersRevenueRatio, blacklistPools, blacklistTokens, pools, getRevenueRatio, dynamicProtocolFees = false, algebraCommunityFee = false }: UniV3Config): FetchV2 => {
   const fetch: FetchV2 = async (fetchOptions) => {
     const { createBalances, getLogs, chain, api } = fetchOptions
     const pairObject: IJSON<string[]> = {}
@@ -404,6 +404,13 @@ export const getUniV3LogAdapter: any = ({ factory, poolCreatedEvent, swapEvent =
       if (isAlgebraV3) {
         let _fees = await api.multiCall({ abi: 'function fee() view returns (uint24)', calls: logs.map((log: any) => log.pool), permitFailure: true })
         _fees.forEach((fee: any, i: number) => { if (fee != null) fees[logs[i].pool] = fee / 1e6 })
+      }
+      // Solidly V3 and its forks set the swap fee per pool and change it over time, so there is no
+      // fee tier in PoolCreated: the third field of that event is the tick spacing. The live fee is
+      // the third member of slot0, on the same 1e6 denominator as a uniswap v3 fee tier.
+      if (feeFromSlot0) {
+        const _slots = await api.multiCall({ abi: 'function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint24 fee, bool unlocked)', calls: logs.map((log: any) => log.pool), permitFailure: true })
+        _slots.forEach((slot: any, i: number) => { if (slot != null) fees[logs[i].pool] = Number(slot.fee) / 1e6 })
       }
       if (isAlgebraV2) {
         let _states = await api.multiCall({ abi: 'function globalState() view returns (uint160 price, int24 tick, uint16 fee, uint16 timepointIndex, uint16 communityFeeToken0, uint16 communityFeeToken1, bool unlocked)', calls: logs.map((log: any) => log.pool), permitFailure: true })
@@ -592,6 +599,8 @@ type UniV3Config = {
   customLogic?: any,
   isAlgebraV3?: boolean,
   isAlgebraV2?: boolean,
+  // read each pool's live fee from slot0 instead of the PoolCreated event (Solidly V3 forks)
+  feeFromSlot0?: boolean,
   userFeesRatio?: number,
   revenueRatio?: number,
   protocolRevenueRatio?: number,
